@@ -5,12 +5,20 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_MOCK_LOCATION" tools:ignore="MockLocation" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:label="geomock"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        
+        <service
+            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:foregroundServiceType="location"
+            android:exported="true"
+            tools:replace="android:exported" />
+        
         <activity
             android:name=".MainActivity"
             android:exported="true"
