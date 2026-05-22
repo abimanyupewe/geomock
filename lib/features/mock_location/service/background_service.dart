@@ -35,21 +35,46 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 void onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
 
+  final mockService = MockLocationService();
+  final prefs = await SharedPreferences.getInstance();
+
   service.on('stopService').listen((event) {
     service.stopSelf();
   });
 
-  final mockService = MockLocationService();
-  final prefs = await SharedPreferences.getInstance();
-  
-  Timer.periodic(const Duration(seconds: 2), (timer) async {
-    // Reload prefs to get latest target
+  service.on('updateLocation').listen((event) async {
+    if (event != null) {
+      final double lat = event['lat'];
+      final double lng = event['lng'];
+      await prefs.setDouble('mock_lat', lat);
+      await prefs.setDouble('mock_lng', lng);
+    }
+  });
+
+  // Location update loop
+  Timer.periodic(const Duration(seconds: 1), (timer) async {
+    if (service is AndroidServiceInstance) {
+      if (!(await service.isForegroundService())) {
+        timer.cancel();
+        return;
+      }
+    }
+
     await prefs.reload();
     final double? lat = prefs.getDouble('mock_lat');
     final double? lng = prefs.getDouble('mock_lng');
 
     if (lat != null && lng != null) {
+      // Send mock location to Android system
       await mockService.startMock(lat, lng);
+      
+      // Update notification to show active coordinates
+      if (service is AndroidServiceInstance) {
+        service.setForegroundNotificationInfo(
+          title: "GeoMock Pro Active",
+          content: "Mocking at ${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}",
+        );
+      }
     }
   });
 }

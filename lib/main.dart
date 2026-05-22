@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'features/map/ui/map_screen.dart';
+import 'features/home/ui/main_screen.dart';
 import 'features/mock_location/service/background_service.dart';
 
 void main() async {
@@ -12,7 +12,6 @@ void main() async {
     ),
   );
 }
-
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -26,7 +25,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: const MapScreen(),
+      home: const MainScreen(),
     );
   }
 }

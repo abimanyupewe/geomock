@@ -1,26 +1,28 @@
-# GeoMock Pro - Repository Instructions
+# GeoMock Pro - Agent Instructions
 
-## [Architecture] Architecture (MVP Standalone)
-- **State Management**: Riverpod.
-- **Pattern**: Feature-First (lib/features/{feature_name}/).
-- **Goal**: Lean and functional location spoofer for Android.
+## [Architecture] Feature-First + Manual Riverpod
+- **Structure**: Logic is partitioned by feature in `lib/features/{feature_name}/`.
+- **State Management**: Uses **manual Riverpod providers** (not `riverpod_generator`). Do NOT run `build_runner`.
+- **Service Layer**: Background logic resides in `lib/features/mock_location/service/background_service.dart`.
 
-## [Tech Stack] Tech Stack
-- **Framework**: Flutter.
-- **Map**: `flutter_map` (OSM).
-- **Native**: Kotlin + MethodChannel for `LocationManager`.
-- **Persistence**: `flutter_background_service`.
+## [Native] Android Mocking Engine
+- **MethodChannel**: `com.example.geomock/mock_location`.
+- **Implementation**: Managed in `MainActivity.kt` using Android's `LocationManager.addTestProvider`.
+- **Constraint**: **Android only**. iOS is NOT supported due to reliance on Android's `testProvider` API.
+- **Requirement**: The app must be selected as the "Mock Location App" in Android Developer Options.
 
-## [Constraints] Critical Constraints
-- **Android Only**: Mocking logic relies on Android `testProvider`. iOS is not in scope for MVP.
-- **Developer Settings**: App requires "Mock Location App" permission in Android Developer Options.
-- **Service Stability**: The Foreground Service is mandatory to prevent GPS "rubberbanding" or process death.
+## [Tech Stack] Core Libraries
+- **Maps**: `flutter_map` (OSM) with `latlong2`.
+- **Background**: `flutter_background_service` (mandatory to prevent "rubberbanding").
+- **Location**: `geolocator` for reading real position; `permission_handler` for GPS permissions.
 
-## [Commands] Key Commands
-- `flutter pub get`: Install dependencies.
-- `flutter run`: Run on Android device/emulator.
-- `flutter analyze`: Check for linting issues.
+## [Verification] Essential Commands
+- `flutter pub get`: Fetch dependencies.
+- `flutter analyze`: Primary lint/type check (adhere to `analysis_options.yaml`).
+- `flutter run`: Deploy to Android (emulator/device).
+- `flutter test`: Run widget/unit tests (verify `test/` directory).
 
-## [Docs] Documentation Reference
-- See `docs/features/` for detailed technical specs before implementing changes.
-- Refer to `docs/PRD Template_ GeoMock Pro.md` for the original product vision.
+## [Investigation] Entrypoints
+- **App Entry**: `lib/main.dart` initializes background services and Riverpod.
+- **Mock Logic**: `lib/features/mock_location/provider/mock_location_provider.dart` bridges UI to Native.
+- **Background Entry**: `initializeService()` in `background_service.dart`.

@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../mock_location/provider/mock_location_provider.dart';
 import '../provider/search_provider.dart';
+import '../provider/favorites_provider.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -17,6 +18,7 @@ class MapScreen extends ConsumerStatefulWidget {
 class _MapScreenState extends ConsumerState<MapScreen> {
   late final MapController _mapController;
   final TextEditingController _searchController = TextEditingController();
+  bool _isSearchFocused = false;
 
   @override
   void initState() {
@@ -53,12 +55,45 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     ref.read(selectedLocationProvider.notifier).state = point;
   }
 
+  void _showAddFavoriteDialog(BuildContext context, LatLng location) {
+    final nameController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add to Favorites'),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(hintText: 'Enter name (e.g. Home)'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              if (nameController.text.isNotEmpty) {
+                ref.read(favoritesProvider.notifier).addFavorite(nameController.text, location);
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final selectedLocation = ref.watch(selectedLocationProvider);
     final isMocking = ref.watch(isMockingActiveProvider);
     final mockNotifier = ref.read(isMockingActiveProvider.notifier);
     final searchResults = ref.watch(searchResultsProvider);
+    final favorites = ref.watch(favoritesProvider);
+    final history = ref.watch(historyProvider);
+    final searchQuery = ref.watch(searchQueryProvider);
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
@@ -111,72 +146,113 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     borderRadius: BorderRadius.circular(30),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
+                        color: Colors.black.withValues(alpha: 0.1),
                         blurRadius: 10,
                         spreadRadius: 2,
                       ),
                     ],
                   ),
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: (value) => ref.read(searchQueryProvider.notifier).state = value,
-                    decoration: InputDecoration(
-                      hintText: 'Search location...',
-                      prefixIcon: const Icon(Icons.search, color: Colors.blueAccent),
-                      suffixIcon: _searchController.text.isNotEmpty 
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              ref.read(searchQueryProvider.notifier).state = "";
-                            },
-                          )
-                        : null,
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                  child: Focus(
+                    onFocusChange: (hasFocus) {
+                      setState(() {
+                        _isSearchFocused = hasFocus;
+                      });
+                    },
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (value) => ref.read(searchQueryProvider.notifier).state = value,
+                      decoration: InputDecoration(
+                        hintText: 'Search location...',
+                        prefixIcon: const Icon(Icons.search, color: Colors.blueAccent),
+                        suffixIcon: _searchController.text.isNotEmpty 
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _searchController.clear();
+                                ref.read(searchQueryProvider.notifier).state = "";
+                              },
+                            )
+                          : null,
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                      ),
                     ),
                   ),
                 ),
                 
-                // Search Results Dropdown
-                if (searchResults.hasValue && searchResults.value!.isNotEmpty)
+                // Search Results / History / Favorites Dropdown
+                if (_isSearchFocused && (searchResults.hasValue || searchQuery.isEmpty))
                   Container(
                     margin: const EdgeInsets.only(top: 5),
-                    constraints: const BoxConstraints(maxHeight: 250),
+                    constraints: const BoxConstraints(maxHeight: 350),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(15),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withValues(alpha: 0.1),
                           blurRadius: 10,
                         ),
                       ],
                     ),
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      padding: EdgeInsets.zero,
-                      itemCount: searchResults.value!.length,
-                      separatorBuilder: (context, index) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final result = searchResults.value![index];
-                        return ListTile(
-                          title: Text(result.displayName, maxLines: 2, overflow: TextOverflow.ellipsis),
-                          onTap: () {
-                            _mapController.move(result.location, 15.0);
-                            ref.read(selectedLocationProvider.notifier).state = result.location;
-                            ref.read(searchQueryProvider.notifier).state = "";
-                            _searchController.clear();
-                            FocusScope.of(context).unfocus();
-                          },
-                        );
-                      },
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (searchQuery.isEmpty) ...[
+                            if (favorites.isNotEmpty) ...[
+                              const Padding(
+                                padding: EdgeInsets.all(10.0),
+                                child: Text('Favorites', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                              ),
+                              ...favorites.map((fav) => ListTile(
+                                leading: const Icon(Icons.star, color: Colors.amber),
+                                title: Text(fav.name),
+                                subtitle: Text('${fav.latitude.toStringAsFixed(4)}, ${fav.longitude.toStringAsFixed(4)}'),
+                                onTap: () {
+                                  _mapController.move(fav.location, 15.0);
+                                  ref.read(selectedLocationProvider.notifier).state = fav.location;
+                                  FocusScope.of(context).unfocus();
+                                },
+                              )),
+                            ],
+                            if (history.isNotEmpty) ...[
+                              const Padding(
+                                padding: EdgeInsets.all(10.0),
+                                child: Text('Recent', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                              ),
+                              ...history.map((h) => ListTile(
+                                leading: const Icon(Icons.history),
+                                title: Text(h.name),
+                                subtitle: Text('${h.latitude.toStringAsFixed(4)}, ${h.longitude.toStringAsFixed(4)}'),
+                                onTap: () {
+                                  _mapController.move(h.location, 15.0);
+                                  ref.read(selectedLocationProvider.notifier).state = h.location;
+                                  FocusScope.of(context).unfocus();
+                                },
+                              )),
+                            ],
+                          ] else if (searchResults.hasValue && searchResults.value!.isNotEmpty)
+                            ...searchResults.value!.map((result) => ListTile(
+                              leading: const Icon(Icons.location_on_outlined),
+                              title: Text(result.displayName, maxLines: 2, overflow: TextOverflow.ellipsis),
+                              onTap: () {
+                                _mapController.move(result.location, 15.0);
+                                ref.read(selectedLocationProvider.notifier).state = result.location;
+                                ref.read(historyProvider.notifier).addToHistory(result.displayName.split(',').first, result.location);
+                                ref.read(searchQueryProvider.notifier).state = "";
+                                _searchController.clear();
+                                FocusScope.of(context).unfocus();
+                              },
+                            )),
+                        ],
+                      ),
                     ),
                   ),
               ],
             ),
           ),
-
+          
           // My Location Button
           Positioned(
             right: 15,
@@ -201,7 +277,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 15,
                     ),
                   ],
@@ -227,7 +303,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                               Container(
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color: Colors.blueAccent.withOpacity(0.1),
+                                  color: Colors.blueAccent.withValues(alpha: 0.1),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(Icons.pin_drop, color: Colors.blueAccent),
@@ -247,6 +323,23 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                     ),
                                   ],
                                 ),
+                              ),
+                              IconButton(
+                                icon: Icon(
+                                  favorites.any((f) => (f.latitude - selectedLocation.latitude).abs() < 0.0001 && (f.longitude - selectedLocation.longitude).abs() < 0.0001)
+                                      ? Icons.star
+                                      : Icons.star_border,
+                                  color: Colors.amber,
+                                ),
+                                onPressed: () {
+                                  final isFav = favorites.any((f) => (f.latitude - selectedLocation.latitude).abs() < 0.0001 && (f.longitude - selectedLocation.longitude).abs() < 0.0001);
+                                  if (isFav) {
+                                    final favId = favorites.firstWhere((f) => (f.latitude - selectedLocation.latitude).abs() < 0.0001 && (f.longitude - selectedLocation.longitude).abs() < 0.0001).id;
+                                    ref.read(favoritesProvider.notifier).removeFavorite(favId);
+                                  } else {
+                                    _showAddFavoriteDialog(context, selectedLocation);
+                                  }
+                                },
                               ),
                               IconButton(
                                 icon: const Icon(Icons.copy, size: 20),
@@ -279,6 +372,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                     );
                                   }
                                   await mockNotifier.startMocking();
+                                  ref.read(historyProvider.notifier).addToHistory(
+                                    'Mocked Location', 
+                                    selectedLocation
+                                  );
                                 }
                               },
                               style: ElevatedButton.styleFrom(
@@ -307,4 +404,3 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 }
-
